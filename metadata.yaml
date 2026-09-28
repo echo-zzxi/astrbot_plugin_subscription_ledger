@@ -2,6 +2,6 @@ name: astrbot_plugin_subscription_ledger
 display_name: 订阅账本
 short_desc: 订阅记录、账本与续费提醒
 desc: 在私聊中由 Agent 管理订阅，并通过插件页面编辑、统计和设置提醒。
-version: 0.4.3
+version: 0.4.4
 author: Echora
 repo: https://github.com/echo-zzxi/astrbot_plugin_subscription_ledger

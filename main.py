@@ -15,10 +15,23 @@ from astrbot.api.star import Context, Star
 from astrbot.api.web import error_response, json_response, request
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
-from .ledger import Ledger, make_owner_key, domain_of
+from .ledger import FIELDS, Ledger, make_owner_key, domain_of
 
 PLUGIN_NAME = "astrbot_plugin_subscription_ledger"
 SYMBOLS = {"CNY": "¥", "USD": "$", "HKD": "HK$", "SGD": "S$", "EUR": "€", "JPY": "¥", "GBP": "£"}
+
+
+def _tool_result(**payload: object) -> str:
+    """Return valid JSON text to AstrBot's Agent tool executor."""
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _tool_item(item: dict) -> dict:
+    """Expose subscription fields without private-chat IDs or reminder state."""
+    result = {key: item[key] for key in ("id", *FIELDS, "next_due_date", "trial_active")}
+    result["reminder_enabled"] = bool(result["reminder_enabled"])
+    result["is_trial"] = bool(result["is_trial"])
+    return result
 
 
 def _rates(base: str, quotes: list[str]) -> dict:
@@ -131,7 +144,7 @@ class SubscriptionLedgerPlugin(Star):
 
     @filter.llm_tool(name="subscription_list")
     async def subscription_list(self, event: AstrMessageEvent, query: str = ""):
-        """列出当前账本的订阅。统一模式下所有私聊共享，分账户模式下仅当前用户可见。
+        """列出当前账本的完整订阅字段和 ID，返回 JSON 供后续修改。统一模式下所有私聊共享。
 
         Args:
             query(string): 可选的名称或标签筛选词。
@@ -140,30 +153,18 @@ class SubscriptionLedgerPlugin(Star):
             items = self.ledger.list(self._private_owner(event))
             if query:
                 items = [item for item in items if query.casefold() in (item["name"] + " " + item["category"]).casefold()]
-            if not items:
-                yield event.plain_result("没有找到订阅记录。")
-                return
-            lines = []
-            for item in items:
-                trial = f" | 试用至 {item['trial_end_date']}" if item["trial_active"] else ""
-                lines.append(f"{item['id']} | {item['name']} | {SYMBOLS.get(item['currency'], item['currency'] + ' ')}{item['amount']} {item['currency']} | 下次 {item['next_due_date'] or '已过期'} | {item['category']} | {item['status']}{trial}")
-            yield event.plain_result("\n".join(lines))
+            return _tool_result(ok=True, items=[_tool_item(item) for item in items])
         except ValueError as exc:
-            yield event.plain_result(str(exc))
+            return _tool_result(ok=False, error=str(exc))
 
     @filter.llm_tool(name="subscription_summary")
     async def subscription_summary(self, event: AstrMessageEvent):
-        """按原币种汇总当前账本月均和年均预计支出，试用中和暂停的订阅不计入。"""
+        """按原币种汇总月均和年均预计支出，返回 JSON；试用中和暂停的不计入。"""
         try:
             totals = self.ledger.summary(self._private_owner(event))
-            if not totals:
-                yield event.plain_result("暂无启用中的付费周期订阅。")
-                return
-            yield event.plain_result("\n".join(
-                f"{currency}：月均 {SYMBOLS.get(currency, currency + ' ')}{amounts['monthly']}，年均 {SYMBOLS.get(currency, currency + ' ')}{amounts['yearly']}"
-                for currency, amounts in totals.items()))
+            return _tool_result(ok=True, totals=totals)
         except ValueError as exc:
-            yield event.plain_result(str(exc))
+            return _tool_result(ok=False, error=str(exc))
 
     @filter.llm_tool(name="subscription_add")
     async def subscription_add(
@@ -198,12 +199,20 @@ class SubscriptionLedgerPlugin(Star):
         """
         try:
             owner = self._private_owner(event)
-            values = locals().copy()
-            values.pop("self"); values.pop("event"); values.pop("owner")
+            values = {
+                "name": name, "renewal_date": renewal_date, "amount": amount,
+                "currency": currency, "cycle_months": cycle_months,
+                "reminder_days": reminder_days, "notes": notes,
+                "renewal_mode": renewal_mode, "icon_url": icon_url,
+                "service_domain": service_domain, "category": category,
+                "payment_method": payment_method, "payment_other": payment_other,
+                "reminder_enabled": reminder_enabled, "reminder_mode": reminder_mode,
+                "is_trial": is_trial, "trial_end_date": trial_end_date,
+            }
             item = self.ledger.save(owner, values)
-            yield event.plain_result(f"已添加 {item['name']}（ID {item['id']}），下次 {item['next_due_date']}。")
+            return _tool_result(ok=True, item=_tool_item(item))
         except ValueError as exc:
-            yield event.plain_result(str(exc))
+            return _tool_result(ok=False, error=str(exc))
 
     @filter.llm_tool(name="subscription_update")
     async def subscription_update(
@@ -213,7 +222,8 @@ class SubscriptionLedgerPlugin(Star):
         notes: str = "__UNCHANGED__", renewal_mode: str = "", status: str = "",
         icon_url: str = "__UNCHANGED__", service_domain: str = "__UNCHANGED__",
         category: str = "__UNCHANGED__", payment_method: str = "", payment_other: str = "__UNCHANGED__",
-        reminder_enabled: str = "", reminder_mode: str = "", is_trial: str = "",
+        reminder_enabled: bool | None = None, reminder_mode: str = "",
+        is_trial: bool | None = None,
         trial_end_date: str = "__UNCHANGED__",
     ):
         """按 ID 修改订阅，未提供的字段保持原值。
@@ -234,32 +244,43 @@ class SubscriptionLedgerPlugin(Star):
             category(string): 新标签；__UNCHANGED__ 不改，空串清空。
             payment_method(string): 付款方式代码；留空不改。
             payment_other(string): 其它付款方式名称；__UNCHANGED__ 不改。
-            reminder_enabled(string): true/false；留空不改。
+            reminder_enabled(boolean): true/false；不提供则保持原值。
             reminder_mode(string): before/day/both；留空不改。
-            is_trial(string): true/false；留空不改。
+            is_trial(boolean): true/false；不提供则保持原值。
             trial_end_date(string): YYYY-MM-DD；__UNCHANGED__ 不改。
         """
         try:
             owner = self._private_owner(event)
             updates = {}
-            for key in ("name", "renewal_date", "amount", "currency", "renewal_mode", "status", "payment_method", "reminder_mode", "reminder_enabled", "is_trial"):
-                value = locals()[key]
+            string_updates = {
+                "name": name, "renewal_date": renewal_date, "amount": amount,
+                "currency": currency, "renewal_mode": renewal_mode,
+                "status": status, "payment_method": payment_method,
+                "reminder_mode": reminder_mode,
+            }
+            for key, value in string_updates.items():
                 if value != "":
                     updates[key] = value
-            for key in ("cycle_months", "reminder_days"):
-                value = locals()[key]
+            for key, value in {"cycle_months": cycle_months, "reminder_days": reminder_days}.items():
                 if value != -1:
                     updates[key] = value
-            for key in ("notes", "icon_url", "service_domain", "category", "payment_other", "trial_end_date"):
-                value = locals()[key]
+            for key, value in {
+                "notes": notes, "icon_url": icon_url,
+                "service_domain": service_domain, "category": category,
+                "payment_other": payment_other, "trial_end_date": trial_end_date,
+            }.items():
                 if value != "__UNCHANGED__":
                     updates[key] = value
+            if reminder_enabled is not None:
+                updates["reminder_enabled"] = reminder_enabled
+            if is_trial is not None:
+                updates["is_trial"] = is_trial
             if not updates:
                 raise ValueError("请提供要修改的字段")
             item = self.ledger.save(owner, updates, item_id)
-            yield event.plain_result(f"已更新 {item['name']}，下次 {item['next_due_date']}。")
+            return _tool_result(ok=True, item=_tool_item(item))
         except ValueError as exc:
-            yield event.plain_result(str(exc))
+            return _tool_result(ok=False, error=str(exc))
 
     @filter.llm_tool(name="subscription_delete")
     async def subscription_delete(self, event: AstrMessageEvent, item_id: str, confirm: bool = False):
@@ -272,13 +293,16 @@ class SubscriptionLedgerPlugin(Star):
         try:
             owner = self._private_owner(event)
             if not confirm:
-                yield event.plain_result("未删除。请先确认订阅名称及 ID。")
-                return
+                return _tool_result(ok=False, requires_confirmation=True,
+                                    error="未删除。请先确认订阅名称及 ID。")
+            item = self.ledger.get(owner, item_id)
+            if not item:
+                raise ValueError("订阅不存在或不在当前账本")
             if not self.ledger.delete(owner, item_id):
                 raise ValueError("订阅不存在或不在当前账本")
-            yield event.plain_result(f"已删除订阅 {item_id}。")
+            return _tool_result(ok=True, deleted={"id": item["id"], "name": item["name"]})
         except ValueError as exc:
-            yield event.plain_result(str(exc))
+            return _tool_result(ok=False, error=str(exc))
 
     async def web_owners(self):
         return json_response({"owners": self.ledger.owners()})
