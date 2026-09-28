@@ -1,0 +1,38 @@
+{
+  "storage_scope": {
+    "description": "账本保存方式",
+    "type": "string",
+    "options": ["unified", "separate"],
+    "labels": ["统一保存：所有私聊用户共用", "分账户保存：每位私聊用户独立"],
+    "default": "separate",
+    "hint": "统一模式下，任何能私聊此 Bot 的用户都能查看和修改整份账本。"
+  },
+  "reminder_owner_key": {
+    "description": "统一模式的提醒接收账户",
+    "type": "string",
+    "default": "",
+    "hint": "填写已通过 /订阅 绑定的私聊账户标识；也可在订阅账本页面从账户列表选择。留空沿用当前接收账户。"
+  },
+  "timezone": {
+    "description": "提醒时区",
+    "type": "string",
+    "options": ["server", "Asia/Shanghai", "Asia/Hong_Kong", "Asia/Singapore", "Asia/Tokyo", "UTC", "America/New_York", "Europe/London"],
+    "labels": ["跟随服务器", "上海 / 北京", "香港", "新加坡", "东京", "UTC", "纽约", "伦敦"],
+    "default": "Asia/Shanghai"
+  },
+  "currency_mode": {
+    "description": "预计支出的显示方式",
+    "type": "string",
+    "options": ["separate", "convert"],
+    "labels": ["按币种分别计算", "自动换算为基准币种"],
+    "default": "separate",
+    "hint": "自动换算使用 Frankfurter 的参考汇率；不可用时退回按币种展示。"
+  },
+  "base_currency": {
+    "description": "自动换算的基准币种",
+    "type": "string",
+    "options": ["CNY", "USD", "HKD", "SGD", "EUR", "JPY", "GBP"],
+    "labels": ["人民币 CNY", "美元 USD", "港币 HKD", "新加坡元 SGD", "欧元 EUR", "日元 JPY", "英镑 GBP"],
+    "default": "CNY"
+  }
+}

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111513">
+  <title>订阅账本 · AstrBot</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">✳</span><div>订阅账本</div></div>
+      <div class="top-actions"><button id="theme-toggle" class="ghost-button" type="button" aria-label="切换到浅色模式">☀ 浅色</button><button id="export" class="ghost-button" type="button">↓ 导出数据</button><button id="open-settings" class="ghost-button" type="button">⚙ 设置</button></div>
+    </header>
+    <div id="preview-note" class="preview-note" hidden>设计预览 · 页面使用示例数据，刷新后重置。真实订阅请从 AstrBot 插件页面打开。</div>
+    <section class="overview" aria-labelledby="overview-title">
+      <div class="section-line"><h2 id="overview-title">支出快照</h2><span id="timezone-caption" class="muted-caption">跟随服务器时区</span></div>
+      <div class="overview-grid">
+        <article class="spend-panel"><div class="spend-top"><span>预计支出 / ESTIMATED SPEND</span><span>✳</span></div><div class="spend-options"><strong>每月平均</strong><label>显示方式<select id="currency-mode"><option value="separate">分币种</option><option value="convert">自动换算</option></select></label><label id="base-wrap" hidden>换算为<select id="base-currency"><option>CNY</option><option>USD</option><option>HKD</option><option>SGD</option><option>EUR</option><option>JPY</option><option>GBP</option></select></label></div><div id="monthly-totals" class="total-lines"><strong>—</strong></div><p id="fx-caption" class="spend-caption">按币种分别展示</p></article>
+        <article class="stat-panel"><span class="stat-symbol">↗</span><div><strong id="count">0</strong><span>启用中</span></div><small>ACTIVE</small></article>
+        <article class="stat-panel"><span class="stat-symbol amber">◷</span><div><strong id="upcoming-count">0</strong><span>30 天内</span></div><small>UP NEXT</small></article>
+        <article class="stat-panel"><span class="stat-symbol violet">◌</span><div><strong id="trial-count">0</strong><span>试用中</span></div><small>FREE TRIALS</small></article>
+      </div>
+      <div class="overview-foot"><span>最近续费 <b id="nearest-name">—</b> <strong id="nearest">—</strong></span><span>年均预计 <b id="yearly-totals">—</b></span></div>
+    </section>
+    <section class="subscriptions" aria-labelledby="list-title">
+      <div class="section-line"><h2 id="list-title">订阅列表</h2><div class="list-tools"><label class="sort">排序 <select id="sort"><option value="date">按下次日期</option><option value="name">按名称</option><option value="amount">按金额</option></select></label><button id="add-top" class="primary-button" type="button">＋ 添加订阅</button></div></div>
+      <div class="control-panel" role="search" aria-label="搜索和筛选订阅">
+        <label class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索服务、标签或备注" aria-label="搜索服务、标签或备注"></label>
+        <div id="category-filters" class="category-filters" aria-label="标签筛选"></div>
+        <div class="control-tail"><span id="scope-label">分账户保存</span><span id="visible-count">0 项</span></div>
+      </div>
+      <div class="tabs" role="group" aria-label="状态筛选"><button id="filter-all" class="active" type="button" aria-pressed="true">全部</button><button id="filter-soon" type="button" aria-pressed="false">即将到期</button><button id="filter-trial" type="button" aria-pressed="false">试用中</button><button id="filter-paused" type="button" aria-pressed="false">已暂停</button></div>
+      <div id="items" class="card-grid"></div>
+      <div class="list-foot"><span>预测金额仅供管理订阅，不代表已经付款。</span><span id="hint">—</span></div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <dialog id="editor" aria-labelledby="form-title"><form id="form" method="dialog"><div class="dialog-head"><div><h2 id="form-title">添加订阅</h2><p>记录服务、付款与提醒规则。</p></div><button id="close" class="icon-button" type="button" aria-label="关闭">×</button></div>
+    <div class="form-grid">
+      <label class="wide">服务名称<input name="name" maxlength="80" required placeholder="例如：ChatGPT Plus"></label>
+      <label>每期金额<input name="amount" type="number" min="0" step="0.01" required value="0"></label>
+      <label>币种<select name="currency"><option value="CNY">¥ CNY · 人民币</option><option value="USD">$ USD · 美元</option><option value="HKD">HK$ HKD · 港币</option><option value="SGD">S$ SGD · 新加坡元</option><option value="EUR">€ EUR · 欧元</option><option value="JPY">¥ JPY · 日元</option><option value="GBP">£ GBP · 英镑</option><option value="OTHER">其它币种</option></select></label>
+      <label id="currency-other-wrap" hidden>其它币种代码<input name="currency_other" maxlength="3" pattern="[A-Za-z]{3}" placeholder="例如 CAD"><small>使用三位英文字母代码。</small></label>
+      <label>首次扣款 / 基准续费日<input name="renewal_date" type="date" required></label>
+      <label>续费周期<select name="cycle_months"><option value="1">每月</option><option value="3">每季度</option><option value="6">每半年</option><option value="12">每年</option><option value="0">单次</option></select></label>
+      <label>续费方式<select name="renewal_mode"><option value="manual">手动续费</option><option value="auto">自动续费</option></select></label>
+      <label>当前状态<select name="status"><option value="active">启用</option><option value="paused">暂停</option></select></label>
+      <label>付款方式<select name="payment_method"><option value="unknown">未记录</option><option value="alipay">支付宝</option><option value="wechat">微信支付</option><option value="bank_card">银行卡</option><option value="credit_card">信用卡</option><option value="paypal">PayPal</option><option value="apple_pay">Apple Pay</option><option value="google_pay">Google Pay</option><option value="other">其它</option></select></label>
+      <label id="payment-other-wrap" hidden>其它付款方式<input name="payment_other" maxlength="80" placeholder="填写付款方式"></label>
+      <label>标签（可选）<input name="category" maxlength="32" list="category-list" placeholder="例如：AI 工具；留空不显示"><datalist id="category-list"><option value="AI 工具"><option value="影音娱乐"><option value="生产力"><option value="云服务"><option value="开发工具"><option value="生活服务"><option value="其他"></datalist></label>
+      <label>试用状态<select name="is_trial"><option value="0">非试用</option><option value="1">试用中</option></select></label>
+      <label id="trial-end-wrap" hidden>试用结束日<input name="trial_end_date" type="date"><small>试用期间暂不计入预计支出；到期前可提醒。</small></label>
+      <label>提醒<select name="reminder_enabled"><option value="1">开启提醒</option><option value="0">不提醒</option></select></label>
+      <label id="reminder-mode-wrap">怎么提醒<select name="reminder_mode"><option value="before">提前一次</option><option value="day">到期当天</option><option value="both">提前和当天</option></select></label>
+      <label id="reminder-days-wrap">提前几天<input name="reminder_days" type="number" min="0" max="30" required value="3"><small>0–30 天；暂停订阅不会提醒。</small></label>
+      <label>服务网站 / 域名<input name="service_domain" maxlength="255" placeholder="openai.com"><small>自动尝试获取服务图标。</small></label>
+      <label class="wide">自定义图标链接<input name="icon_url" type="url" maxlength="2048" placeholder="https://example.com/logo.png"><small>优先于自动图标；无法加载时显示本地标识。</small></label>
+      <label class="wide">备注<textarea name="notes" maxlength="500" rows="2" placeholder="取消入口、套餐说明等"></textarea></label>
+    </div><div id="form-error" class="form-error" role="alert" hidden></div><div class="form-actions"><button id="cancel" class="secondary-button" type="button">取消</button><button id="save" class="submit-button" type="submit">保存订阅 ↗</button></div>
+  </form></dialog>
+
+  <dialog id="settings-dialog" aria-labelledby="settings-title"><div class="dialog-head"><div><h2 id="settings-title">设置</h2><p>统一模式会让所有私聊用户共用一份账本。</p></div><button id="settings-close" class="icon-button" type="button" aria-label="关闭">×</button></div><form id="settings-form" method="dialog"><div class="form-grid"><label>保存方式<select name="storage_scope"><option value="unified">统一保存 · 所有私聊共用</option><option value="separate">分账户保存 · 各自独立</option></select><small class="warning">统一模式下，任何能私聊 Bot 的人都能查看和修改全部订阅。</small></label><label id="owner-wrap">当前账户<select id="owner" name="owner"><option value="">选择已绑定账户</option></select><small>分账户模式记住上次选择。</small></label><label>统一提醒发送到<select name="reminder_owner_key" id="reminder-owner"><option value="">尚未绑定私聊</option></select><small>统一模式只向这个私聊发送提醒。</small></label><label>提醒时区<select name="timezone"><option value="server">跟随服务器</option><option value="Asia/Shanghai">上海 / 北京</option><option value="Asia/Hong_Kong">香港</option><option value="Asia/Singapore">新加坡</option><option value="Asia/Tokyo">东京</option><option value="UTC">UTC</option><option value="America/New_York">纽约</option><option value="Europe/London">伦敦</option></select></label></div><div class="form-actions"><button id="settings-cancel" class="secondary-button" type="button">取消</button><button id="settings-save" class="submit-button" type="submit">保存设置</button></div></form></dialog>
+
+  <dialog id="delete-dialog" aria-labelledby="delete-title"><div class="delete-content"><h2 id="delete-title">移除这项订阅？</h2><p>“<strong id="delete-name"></strong>”会从账本中删除，无法撤销。</p><div class="form-actions"><button id="delete-cancel" class="secondary-button" type="button">保留</button><button id="delete-confirm" class="delete-button" type="button">确认删除</button></div></div></dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
